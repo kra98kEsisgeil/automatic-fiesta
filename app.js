@@ -140,6 +140,12 @@ async function startNavigation() {
   normalRouteName.textContent = currentRoute.name;
 
   try {
+    // B. ジャイロセンサーの開始を最優先（iOSのクリックコンテキスト維持のため）
+    const sensorStarted = await orientationSensor.start();
+    if (!sensorStarted) {
+      alert("ジャイロセンサーの開始に失敗しました。シミュレーションモードで動作します。");
+    }
+
     // A. カメラ映像（メディアストリーム）の取得
     cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' },
@@ -150,12 +156,6 @@ async function startNavigation() {
     cameraVideo.onloadedmetadata = () => {
       cameraVideo.play();
     };
-
-    // B. ジャイロセンサーの開始
-    const sensorStarted = await orientationSensor.start();
-    if (!sensorStarted) {
-      alert("ジャイロセンサーの開始に失敗しました。シミュレーションモードで動作します。");
-    }
 
     // C. Three.js ARレンダラーの初期化
     if (!arRenderer) {

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
 /**
  * Three.js を用いてAR案内アセット（矢印・ライン）を描画するクラス
