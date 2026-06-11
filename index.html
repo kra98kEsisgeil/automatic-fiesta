@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>駅構内乗り換え案内 WebAR×VPS</title>
+  <!-- Google Fonts: Outfit (数字・英語向け) & Noto Sans JP -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <!-- Material Icons for sleek iconography -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <link rel="stylesheet" href="./css/main.css">
+  
+  <!-- Import map for modern ES modules -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <!-- ==================== SETUP SCREEN ==================== -->
+  <div id="setup-screen" class="screen active">
+    <div class="glass-card">
+      <div class="logo-container">
+        <span class="material-icons-round logo-icon">navigation</span>
+        <h1>StationAR</h1>
+        <p class="subtitle">WebAR×VPS 乗り換えナビ</p>
+      </div>
+
+      <div class="form-container">
+        <div class="input-group">
+          <label for="start-point">
+            <span class="material-icons-round label-icon">trip_origin</span>
+            出発地（乗換元）
+          </label>
+          <div class="select-wrapper">
+            <select id="start-point">
+              <option value="jr_south_gate" selected>JR新宿駅 南改札</option>
+              <option value="jr_east_gate">JR新宿駅 東改札 (ダミー)</option>
+              <option value="odakyu_gate">小田急線 新宿駅改札 (ダミー)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="end-point">
+            <span class="material-icons-round label-icon">place</span>
+            目的地（乗換先）
+          </label>
+          <div class="select-wrapper">
+            <select id="end-point">
+              <option value="toei_shinjuku_gate" selected>都営新宿線 改札</option>
+              <option value="keio_new_gate">京王新線 改札 (ダミー)</option>
+              <option value="marunouchi_gate">丸ノ内線 改札 (ダミー)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="safety-agreement">
+          <span class="material-icons-round safety-icon">security</span>
+          <p>移動中はスマホを下げて前を見て歩いてください。分岐点のみかざしてARを確認する安全設計です。</p>
+        </div>
+
+        <button id="start-btn" class="primary-btn">
+          <span>ナビゲーションを開始</span>
+          <span class="material-icons-round btn-arrow">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== APP SCREEN (CONTAINER FOR ACTIVE MODES) ==================== -->
+  <div id="app-screen" class="screen">
+    
+    <!-- AR VIEWPORT (CAMERA & THREE.JS CANVAS) -->
+    <div id="ar-viewport">
+      <video id="camera-stream" autoplay playsinline muted></video>
+      <canvas id="ar-canvas"></canvas>
+      
+      <!-- AR Mode Top HUD -->
+      <div id="ar-hud-top" class="hud-panel">
+        <div class="hud-route-info">
+          <span id="ar-step-icon" class="material-icons-round info-icon">arrow_upward</span>
+          <div class="text-block">
+            <h2 id="ar-step-title">直進して奥へ進みます</h2>
+            <p id="ar-step-desc">小田急改札等のノイズを無視し、突き当たりへ進む</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- AR Mode Bottom HUD -->
+      <div id="ar-hud-bottom" class="hud-panel">
+        <div class="ar-safety-banner animate-pulse">
+          <span class="material-icons-round">warning</span>
+          <span>立ち止まって確認してください。移動時はスマホを下げます。</span>
+        </div>
+        
+        <div class="ar-status-row">
+          <div id="vps-status-badge" class="status-badge state-searching">
+            <span class="dot"></span>
+            <span class="status-text">VPS照合中...</span>
+          </div>
+          <button id="ar-close-btn" class="icon-btn-round">
+            <span class="material-icons-round">close</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NORMAL MODE (SAFETY WALKING UI) -->
+    <div id="normal-viewport" class="active">
+      <div class="safety-indicator-glow"></div>
+      
+      <div class="normal-header">
+        <div class="route-header-info">
+          <span class="badge">ナビゲーション中</span>
+          <h3 id="normal-route-name">JR南改札 ➔ 都営新宿線</h3>
+        </div>
+        <button id="exit-nav-btn" class="icon-btn-text">
+          <span class="material-icons-round">exit_to_app</span>
+          <span>終了</span>
+        </button>
+      </div>
+
+      <div class="nav-instruction-card">
+        <div class="instruction-main">
+          <div class="arrow-container">
+            <span id="normal-step-icon" class="material-icons-round instruction-arrow">straight</span>
+          </div>
+          <div class="distance-display">
+            <span id="normal-step-distance" class="dist-num">50</span>
+            <span class="dist-unit">m</span>
+          </div>
+        </div>
+        <h2 id="normal-step-text" class="instruction-text">まっすぐ奥へ進む</h2>
+        <p id="normal-step-sub" class="instruction-subtext">小田急線改札には入らず、突き当たりまで直進します</p>
+      </div>
+
+      <div class="safety-interaction-prompt">
+        <div class="phone-tilt-animation">
+          <span class="material-icons-round phone-icon animate-bounce">screen_rotation</span>
+        </div>
+        <div class="prompt-text">
+          <h3>分岐点周辺でのみスマホをかざす</h3>
+          <p>スマホを垂直に立てると、自動でARカメラが起動します。</p>
+        </div>
+      </div>
+
+      <!-- Vibration Alert Overlay (Approaching turn point) -->
+      <div id="turn-alert-banner" class="turn-alert">
+        <span class="material-icons-round alert-icon">vibration</span>
+        <div class="alert-content">
+          <h4>まもなく分岐点です</h4>
+          <p>スマホをかざして進路を確認してください</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== DEBUG / SIMULATOR CONTROL PANEL ==================== -->
+  <div id="debug-panel">
+    <div class="debug-header">
+      <h4>🛠️ シミュレータ制御</h4>
+      <button id="toggle-debug-btn" class="debug-btn-sm">閉じる</button>
+    </div>
+    <div class="debug-body">
+      <div class="debug-section">
+        <p class="debug-label">デバイスの傾き (センサー擬似値)</p>
+        <div class="debug-btn-group">
+          <button id="sim-tilt-down" class="debug-btn active">水平 (通常モード)</button>
+          <button id="sim-tilt-up" class="debug-btn">垂直 (ARモード)</button>
+        </div>
+      </div>
+      <div class="debug-section">
+        <p class="debug-label">VPSローカライズ状態</p>
+        <div class="debug-btn-group">
+          <button id="sim-vps-fail" class="debug-btn active">未照合</button>
+          <button id="sim-vps-success" class="debug-btn">照合成功</button>
+        </div>
+      </div>
+      <div class="debug-section">
+        <p class="debug-label">案内ステップ (現在地)</p>
+        <div class="debug-btn-group-3">
+          <button id="sim-step-1" class="debug-btn active">①南改札直後</button>
+          <button id="sim-step-2" class="debug-btn">②突き当たり</button>
+          <button id="sim-step-3" class="debug-btn">③階段上</button>
+        </div>
+      </div>
+      <div class="debug-status">
+        <p>角度(Beta): <span id="debug-angle-val">15</span>°</p>
+        <p>状態: <span id="debug-state-val">NORMAL</span></p>
+      </div>
+    </div>
+  </div>
+  
+  <button id="open-debug-btn" class="debug-trigger-btn">
+    <span class="material-icons-round">settings</span>
+  </button>
+
+  <!-- Loader Overlay -->
+  <div id="global-loader" class="loader-overlay">
+    <div class="spinner"></div>
+    <p id="loader-text">アセットをロード中...</p>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
